@@ -170,11 +170,12 @@ class Transfers:
 
 async def approval(ctx, deadline):
     i, _ = await ctx.first(ctx.wait_signal("approve"), ctx.sleep(deadline))
+    decided = ctx.now()  # part of the result: a replay must see the same time
     if i == 0:
-        await ctx.activity("ship", ctx.workflow_id, retry=RetryPolicy(max_attempts=10**6, **FAST), timeout=5)
-        return "shipped"
-    await ctx.activity("release", ctx.workflow_id, retry=RetryPolicy(max_attempts=10**6, **FAST), timeout=5)
-    return "expired"
+        await ctx.activity("ship", ctx.workflow_id, decided, retry=RetryPolicy(max_attempts=10**6, **FAST), timeout=5)
+        return {"outcome": "shipped", "decided_at": decided}
+    await ctx.activity("release", ctx.workflow_id, decided, retry=RetryPolicy(max_attempts=10**6, **FAST), timeout=5)
+    return {"outcome": "expired", "decided_at": decided}
 
 
 class Approvals:
@@ -192,7 +193,7 @@ class Approvals:
         flaky = self.flaky
 
         def effect(book):
-            def act(order):
+            def act(order, decided_at):
                 flaky.maybe(flaky.before, "before")
                 key = activity_context().idempotency_key
                 book.setdefault(order, set()).add(key)
@@ -210,7 +211,7 @@ class Approvals:
     def check(self, client, histories):
         bad = []
         for wid, _ in self.plan:
-            res = client.describe(wid)["result"]
+            res = client.describe(wid)["result"]["outcome"]
             types = [e["type"] for e in histories[wid][-1]]
             sig = types.index("signal") if "signal" in types else 10**9
             fired = types.index("timer_fired") if "timer_fired" in types else 10**9
