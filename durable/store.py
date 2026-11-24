@@ -124,6 +124,7 @@ class NotFound(Exception):
 class Store:
     def __init__(self, path=":memory:", synchronous="FULL"):
         self.path = path
+        self.synchronous = synchronous
         self.db = sqlite3.connect(path, isolation_level=None, check_same_thread=False, timeout=60)
         self.db.row_factory = sqlite3.Row
         if path != ":memory:":
@@ -254,34 +255,48 @@ class Store:
                 " AND (lease_until IS NULL OR lease_until <= ?) ORDER BY task_after LIMIT 1", (now, now)).fetchone()
             if row is None:
                 return None
-            db.execute("UPDATE runs SET lease_owner = ?, lease_until = ?, lease_token = lease_token + 1 WHERE run_id = ?",
-                       (owner, now + lease, row["run_id"]))
-            r = db.execute("SELECT lease_token, last_event FROM runs WHERE run_id = ?", (row["run_id"],)).fetchone()
-            hist = [{"id": h["id"], **json.loads(h["data"])} for h in
-                    db.execute("SELECT id, data FROM history WHERE run_id = ? ORDER BY id", (row["run_id"],))]
-            return WorkflowTask(row["run_id"], row["workflow_id"], row["workflow"], owner, r["lease_token"],
-                                r["last_event"], hist)
+            return self._lease_workflow_task(db, row, owner, now, lease)
 
-    def complete_workflow_task(self, task, commands, now):
+    def _lease_workflow_task(self, db, row, owner, now, lease):
+        db.execute("UPDATE runs SET lease_owner = ?, lease_until = ?, lease_token = lease_token + 1 WHERE run_id = ?",
+                   (owner, now + lease, row["run_id"]))
+        r = db.execute("SELECT lease_token, last_event FROM runs WHERE run_id = ?", (row["run_id"],)).fetchone()
+        hist = [{"id": h["id"], **json.loads(h["data"])} for h in
+                db.execute("SELECT id, data FROM history WHERE run_id = ? ORDER BY id", (row["run_id"],))]
+        return WorkflowTask(row["run_id"], row["workflow_id"], row["workflow"], owner, r["lease_token"],
+                            r["last_event"], hist)
+
+    def complete_workflow_task(self, task, commands, now, eager=0, queues=("default",)):
         """Appends task_done + the commands and carries them out. Returns
-        "ok", "conflict" (events arrived meanwhile: run the task again) or
-        "lost" (another worker owns the task now)."""
+        (status, activities): status is "ok", "conflict" (events arrived
+        meanwhile: run the task again) or "lost" (another worker owns the
+        task now). With eager > 0, up to that many of the activities just
+        scheduled are leased to the same worker in the same transaction."""
         if "split_commit" in self.unsafe:
-            return self._complete_split(task, commands, now)
+            return self._complete_split(task, commands, now), []
         with self.tx() as db:
             r = db.execute("SELECT lease_token, last_event, status FROM runs WHERE run_id = ?", (task.run_id,)).fetchone()
             if r["lease_token"] != task.token or r["status"] != "running":
-                return "lost"
+                return "lost", []
             if r["last_event"] != task.last_event and "skip_event_check" not in self.unsafe:
                 db.execute("UPDATE runs SET lease_owner = NULL, lease_until = NULL WHERE run_id = ?", (task.run_id,))
-                return "conflict"
+                return "conflict", []
             self._append(db, task.run_id, [{"type": "task_done", "time": now}] + commands)
             self._point("workflow_commit")
             db.execute("UPDATE runs SET needs_task = 0, lease_owner = NULL, lease_until = NULL, task_error = NULL"
                        " WHERE run_id = ?", (task.run_id,))
             for cmd in commands:
                 self._carry_out(db, task, cmd, now)
-        return "ok"
+            taken = []
+            for cmd in commands:
+                if len(taken) == eager:
+                    break
+                if cmd["type"] == "activity_scheduled" and cmd.get("options", {}).get("queue", "default") in queues:
+                    row = db.execute("SELECT * FROM activities WHERE run_id = ? AND seq = ?",
+                                     (task.run_id, cmd["seq"])).fetchone()
+                    if row is not None:  # gone if the same commands closed the run
+                        taken.append(self._lease_activity(db, row, row["attempt"], task.owner, now))
+        return "ok", taken
 
     def _complete_split(self, task, commands, now):
         # the broken variant: history and side tables in separate transactions
@@ -331,6 +346,16 @@ class Store:
             self._new_run(db, task.workflow, task.workflow_id, cmd["input"], now,
                           parent=json.loads(parent) if parent else None)
 
+    def release(self, task):
+        """Gives back a leased task that was never started (graceful shutdown)."""
+        with self.tx() as db:
+            if isinstance(task, WorkflowTask):
+                db.execute("UPDATE runs SET lease_owner = NULL, lease_until = NULL WHERE run_id = ? AND lease_token = ?",
+                           (task.run_id, task.token))
+            else:
+                db.execute("UPDATE activities SET lease_owner = NULL, lease_until = NULL"
+                           " WHERE run_id = ? AND seq = ? AND lease_token = ?", (task.run_id, task.seq, task.token))
+
     def fail_workflow_task(self, task, error, now, retry_in):
         """The workflow code could not run (non-determinism, a bug in replay):
         nothing is written, the task is retried later, e.g. after a fix is
@@ -360,11 +385,14 @@ class Store:
                                               {"type": "Timeout", "message": f"no result after {attempt} attempts"})
                         continue
                     attempt += 1
-                db.execute("UPDATE activities SET attempt = ?, lease_owner = ?, lease_until = ?,"
-                           " lease_token = lease_token + 1 WHERE run_id = ? AND seq = ?",
-                           (attempt, owner, now + row["timeout"], row["run_id"], row["seq"]))
-                return ActivityTask(row["run_id"], row["workflow_id"], row["seq"], row["name"], json.loads(row["args"]),
-                                    attempt, owner, row["lease_token"] + 1, row["timeout"])
+                return self._lease_activity(db, row, attempt, owner, now)
+
+    def _lease_activity(self, db, row, attempt, owner, now):
+        db.execute("UPDATE activities SET attempt = ?, lease_owner = ?, lease_until = ?,"
+                   " lease_token = lease_token + 1 WHERE run_id = ? AND seq = ?",
+                   (attempt, owner, now + row["timeout"], row["run_id"], row["seq"]))
+        return ActivityTask(row["run_id"], row["workflow_id"], row["seq"], row["name"], json.loads(row["args"]),
+                            attempt, owner, row["lease_token"] + 1, row["timeout"])
 
     def _activity_failed(self, db, run_id, seq, error):
         db.execute("DELETE FROM activities WHERE run_id = ? AND seq = ?", (run_id, seq))
@@ -376,16 +404,25 @@ class Store:
             return None
         return row
 
-    def complete_activity(self, task, result, now):
-        """Returns False if this attempt no longer counts (it timed out and
-        was retried, or the run closed)."""
+    def complete_activity(self, task, result, now, sticky=False, lease=30.0):
+        """Returns (accepted, workflow_task). accepted is False if this
+        attempt no longer counts (it timed out and was retried, or the run
+        closed). With sticky, the workflow task this result makes due is
+        leased to the same worker in the same transaction, if it is free."""
         with self.tx() as db:
             if self._current(db, task) is None:
-                return False
+                return False, None
             db.execute("DELETE FROM activities WHERE run_id = ? AND seq = ?", (task.run_id, task.seq))
             self._input(db, task.run_id, {"type": "activity_done", "seq": task.seq, "result": result})
             self._point("activity_commit")
-            return True
+            wt = None
+            if sticky:
+                row = db.execute("SELECT run_id, workflow_id, workflow FROM runs WHERE run_id = ? AND needs_task = 1"
+                                 " AND task_after <= ? AND (lease_until IS NULL OR lease_until <= ?)",
+                                 (task.run_id, now, now)).fetchone()
+                if row is not None:
+                    wt = self._lease_workflow_task(db, row, task.owner, now, lease)
+            return True, wt
 
     def fail_activity(self, task, error, now):
         with self.tx() as db:
