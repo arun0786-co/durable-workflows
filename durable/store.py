@@ -252,6 +252,11 @@ class Store:
     def acquire_workflow_task(self, owner, now, lease=30.0, known=None):
         """known: {run_id: last event id the caller holds in memory}; only
         later events are read for those runs."""
+        # a plain read first: in WAL mode it does not block writers, so idle
+        # pollers do not queue for the write lock
+        if not self._read("SELECT 1 FROM runs WHERE needs_task = 1 AND task_after <= ?"
+                          " AND (lease_until IS NULL OR lease_until <= ?) LIMIT 1", (now, now)):
+            return None
         with self.tx() as db:
             row = db.execute(
                 "SELECT run_id, workflow_id, workflow FROM runs WHERE needs_task = 1 AND task_after <= ?"
@@ -377,6 +382,9 @@ class Store:
 
     def acquire_activity(self, owner, now, queues=("default",)):
         marks = ",".join("?" * len(queues))
+        if not self._read(f"SELECT 1 FROM activities WHERE queue IN ({marks}) AND available_at <= ?"
+                          " AND (lease_until IS NULL OR lease_until <= ?) LIMIT 1", (*queues, now, now)):
+            return None
         with self.tx() as db:
             while True:
                 row = db.execute(
@@ -457,6 +465,8 @@ class Store:
     # ---- timers
 
     def fire_timers(self, now, limit=100):
+        if not self._read("SELECT 1 FROM timers WHERE fire_at <= ? LIMIT 1", (now,)):
+            return 0
         with self.tx() as db:
             rows = db.execute("SELECT run_id, seq FROM timers WHERE fire_at <= ? ORDER BY fire_at, run_id, seq LIMIT ?",
                               (now, limit)).fetchall()
