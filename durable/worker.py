@@ -72,6 +72,7 @@ class Worker:
         # other work, in the same transaction (saves a take per step)
         self.eager = eager
         self.local_wf, self.local_act = deque(), deque()
+        self.wake = threading.Event()  # set when local work arrives, so idle threads stop polling
         # sticky execution: replayers kept after a committed task, so the next
         # task of the same run reads and runs only the new events
         self.sticky, self.cache_size = sticky, cache_size
@@ -125,7 +126,9 @@ class Worker:
             self.cache[task.run_id] = (rep, task.last_event + 1 + len(val))
             while len(self.cache) > self.cache_size:
                 self.cache.popitem(last=False)
-        self.local_act.extend(acts)
+        if acts:
+            self.local_act.extend(acts)
+            self.wake.set()
         self.stats["eager"] += len(acts)
         self.stats["workflow_tasks"] += res == "ok"
         self.stats["conflicts"] += res == "conflict"
@@ -173,6 +176,7 @@ class Worker:
                                                   known=self._known())
             if wt is not None:
                 self.local_wf.append(wt)
+                self.wake.set()
                 self.stats["eager"] += 1
         else:
             ok = self.store.fail_activity(task, val, now)
@@ -206,7 +210,8 @@ class Worker:
                 for s in steps:
                     busy = s() or busy
                 if not busy:
-                    stop.wait(poll)
+                    w.wake.wait(poll)
+                    w.wake.clear()
 
         threads = [threading.Thread(target=loop, args=(["timer_step", "workflow_step"],), daemon=True)]
         threads += [threading.Thread(target=loop, args=(["activity_step"],), daemon=True) for _ in range(activity_threads)]
@@ -219,7 +224,7 @@ class Worker:
                    queues=self.queues, lease=self.lease, task_retry=self.task_retry, eager=self.eager,
                    sticky=self.sticky, cache_size=self.cache_size)
         w.workflows, w.activities, w.stats = self.workflows, self.activities, self.stats
-        w.local_wf, w.local_act, w.cache = self.local_wf, self.local_act, self.cache
+        w.local_wf, w.local_act, w.cache, w.wake = self.local_wf, self.local_act, self.cache, self.wake
         return w
 
     def shutdown(self):
