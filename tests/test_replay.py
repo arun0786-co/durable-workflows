@@ -36,6 +36,7 @@ async def v2_patched(ctx):
 
 
 def deploy(env, fn):
+    env.worker.shutdown()
     env.worker = Worker(env.store, [fn], [a, b, c], clock=env.clock)
 
 
