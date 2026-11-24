@@ -100,9 +100,9 @@ The fix is the try/cancel pattern. Every operation carries a business key, and c
 
 That brings it to 8 transactions. A crash loses the eagerly leased work, which then waits for its lease to run out like any other. The simulator's crash fault drops it to test exactly that.
 
-**Sticky cache.** Without it, every workflow task reads and replays the whole history, so a run of n steps costs O(n²). A 3,000-activity workflow took 31.6 s, of which one replay of the final 9,003 events is 9 ms (about 1 µs per event).
+**Sticky cache.** Without it, every workflow task reads and replays the whole history, so a run of n steps costs O(n²). A 3,000-activity workflow took 54.5 s, where one replay of the final 9,003 events takes 14 ms (about 1.5 µs per event; `results/replay.json`, on a busy machine).
 
-With the cache, a worker keeps the replayer of each run it committed a task for. On the next task it tells the store which event it has, reads only the later ones, and feeds them to the kept replayer (`Replayer.advance`). If someone else moved the run on meanwhile, the later events contain commands, and the worker falls back to a full replay. The 3,000-activity run now takes 0.18 s.
+With the cache, a worker keeps the replayer of each run it committed a task for. On the next task it tells the store which event it has, reads only the later ones, and feeds them to the kept replayer (`Replayer.advance`). If someone else moved the run on meanwhile, the later events contain commands, and the worker falls back to a full replay. The 3,000-activity run now takes 0.25 s.
 
 The cache hides non-deterministic code: code that is not re-run cannot diverge. Temporal has the same property. The simulator therefore finishes every run with a full replay from scratch, and compares it with what was recorded.
 

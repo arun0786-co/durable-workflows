@@ -1,0 +1,15 @@
+{
+ "transfers": 300,
+ "workers": 3,
+ "kills": 362,
+ "seconds": 22.0,
+ "statuses": {
+  "rejected": 63,
+  "done": 207,
+  "refunded": 30
+ },
+ "bank_calls": 625,
+ "bank_effects": 570,
+ "problems": [],
+ "dir": "/var/folders/j7/nw5hqkjn48l8k270p0zq10bh0000gn/T/durable-chaos-7una43al"
+}

@@ -2,14 +2,14 @@
  "machine": {
   "chip": "arm64",
   "python": "3.12.13",
-  "load": 11.7236328125
+  "load": 10.11767578125
  },
  "rows": [
   {
    "activities": 10,
    "events": 33,
-   "one replay ms": 0.03,
-   "us per event": 0.87,
+   "one replay ms": 0.06,
+   "us per event": 1.72,
    "whole run s, no cache": 0.0,
    "no cache, continue_as_new every 100": 0.0,
    "sticky cache": 0.0
@@ -17,29 +17,29 @@
   {
    "activities": 100,
    "events": 303,
-   "one replay ms": 0.25,
-   "us per event": 0.82,
-   "whole run s, no cache": 0.04,
-   "no cache, continue_as_new every 100": 0.04,
-   "sticky cache": 0.01
+   "one replay ms": 0.41,
+   "us per event": 1.34,
+   "whole run s, no cache": 0.06,
+   "no cache, continue_as_new every 100": 0.09,
+   "sticky cache": 0.02
   },
   {
    "activities": 1000,
    "events": 3003,
-   "one replay ms": 3.26,
-   "us per event": 1.08,
-   "whole run s, no cache": 3.36,
-   "no cache, continue_as_new every 100": 0.37,
-   "sticky cache": 0.05
+   "one replay ms": 4.8,
+   "us per event": 1.6,
+   "whole run s, no cache": 6.29,
+   "no cache, continue_as_new every 100": 0.65,
+   "sticky cache": 0.08
   },
   {
    "activities": 3000,
    "events": 9003,
-   "one replay ms": 9.16,
-   "us per event": 1.02,
-   "whole run s, no cache": 31.57,
-   "no cache, continue_as_new every 100": 1.24,
-   "sticky cache": 0.18
+   "one replay ms": 13.88,
+   "us per event": 1.54,
+   "whole run s, no cache": 54.53,
+   "no cache, continue_as_new every 100": 2.15,
+   "sticky cache": 0.25
   }
  ]
 }

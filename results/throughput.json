@@ -1,0 +1,98 @@
+{
+ "machine": {
+  "chip": "arm",
+  "python": "3.12.13",
+  "cpus": 12,
+  "load": 9.71044921875
+ },
+ "throughput": [
+  {
+   "eager": false,
+   "processes": 1,
+   "workflows": 2000,
+   "seconds": 3.91,
+   "workflows/s": 512,
+   "synchronous": "FULL"
+  },
+  {
+   "eager": false,
+   "processes": 2,
+   "workflows": 2000,
+   "seconds": 5.55,
+   "workflows/s": 360,
+   "synchronous": "FULL"
+  },
+  {
+   "eager": false,
+   "processes": 4,
+   "workflows": 2000,
+   "seconds": 6.4,
+   "workflows/s": 312,
+   "synchronous": "FULL"
+  },
+  {
+   "eager": false,
+   "processes": 8,
+   "workflows": 2000,
+   "seconds": 6.46,
+   "workflows/s": 310,
+   "synchronous": "FULL"
+  },
+  {
+   "eager": true,
+   "processes": 1,
+   "workflows": 2000,
+   "seconds": 4.06,
+   "workflows/s": 493,
+   "synchronous": "FULL"
+  },
+  {
+   "eager": true,
+   "processes": 2,
+   "workflows": 2000,
+   "seconds": 3.49,
+   "workflows/s": 573,
+   "synchronous": "FULL"
+  },
+  {
+   "eager": true,
+   "processes": 4,
+   "workflows": 2000,
+   "seconds": 3.74,
+   "workflows/s": 535,
+   "synchronous": "FULL"
+  },
+  {
+   "eager": true,
+   "processes": 8,
+   "workflows": 2000,
+   "seconds": 4.13,
+   "workflows/s": 484,
+   "synchronous": "FULL"
+  },
+  {
+   "eager": true,
+   "processes": 4,
+   "workflows": 2000,
+   "seconds": 2.83,
+   "workflows/s": 706,
+   "synchronous": "NORMAL"
+  }
+ ],
+ "latency": [
+  {
+   "eager": false,
+   "workflows": 200,
+   "p50 ms": 11.7,
+   "p99 ms": 20.4,
+   "synchronous": "FULL"
+  },
+  {
+   "eager": true,
+   "workflows": 200,
+   "p50 ms": 4.2,
+   "p99 ms": 8.2,
+   "synchronous": "FULL"
+  }
+ ]
+}
