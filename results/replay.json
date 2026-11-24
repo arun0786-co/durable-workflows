@@ -1,0 +1,45 @@
+{
+ "machine": {
+  "chip": "arm64",
+  "python": "3.12.13",
+  "load": 11.7236328125
+ },
+ "rows": [
+  {
+   "activities": 10,
+   "events": 33,
+   "one replay ms": 0.03,
+   "us per event": 0.87,
+   "whole run s, no cache": 0.0,
+   "no cache, continue_as_new every 100": 0.0,
+   "sticky cache": 0.0
+  },
+  {
+   "activities": 100,
+   "events": 303,
+   "one replay ms": 0.25,
+   "us per event": 0.82,
+   "whole run s, no cache": 0.04,
+   "no cache, continue_as_new every 100": 0.04,
+   "sticky cache": 0.01
+  },
+  {
+   "activities": 1000,
+   "events": 3003,
+   "one replay ms": 3.26,
+   "us per event": 1.08,
+   "whole run s, no cache": 3.36,
+   "no cache, continue_as_new every 100": 0.37,
+   "sticky cache": 0.05
+  },
+  {
+   "activities": 3000,
+   "events": 9003,
+   "one replay ms": 9.16,
+   "us per event": 1.02,
+   "whole run s, no cache": 31.57,
+   "no cache, continue_as_new every 100": 1.24,
+   "sticky cache": 0.18
+  }
+ ]
+}
