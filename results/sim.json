@@ -1,0 +1,281 @@
+[
+ {
+  "scenario": "transfers",
+  "mutation": null,
+  "seeds": 2000,
+  "failing": 0,
+  "seconds": 21.1,
+  "first_failure": null,
+  "stats": {
+   "workflow_tasks": 77748,
+   "conflicts": 0,
+   "lost": 4772,
+   "task_failures": 0,
+   "activities": 67940,
+   "activity_rejected": 9220,
+   "eager": 91890,
+   "cache_hits": 30598
+  }
+ },
+ {
+  "scenario": "approvals",
+  "mutation": null,
+  "seeds": 2000,
+  "failing": 0,
+  "seconds": 18.3,
+  "first_failure": null,
+  "stats": {
+   "workflow_tasks": 59006,
+   "conflicts": 2175,
+   "lost": 2559,
+   "task_failures": 0,
+   "activities": 25454,
+   "activity_rejected": 3230,
+   "eager": 39715,
+   "cache_hits": 18262
+  }
+ },
+ {
+  "scenario": "counters",
+  "mutation": null,
+  "seeds": 2000,
+  "failing": 0,
+  "seconds": 15.7,
+  "first_failure": null,
+  "stats": {
+   "workflow_tasks": 35691,
+   "conflicts": 6916,
+   "lost": 1165,
+   "task_failures": 0,
+   "activities": 0,
+   "activity_rejected": 0,
+   "eager": 0,
+   "cache_hits": 7037
+  }
+ },
+ {
+  "scenario": "fanout",
+  "mutation": null,
+  "seeds": 2000,
+  "failing": 0,
+  "seconds": 18.2,
+  "first_failure": null,
+  "stats": {
+   "workflow_tasks": 70990,
+   "conflicts": 2321,
+   "lost": 2691,
+   "task_failures": 0,
+   "activities": 30164,
+   "activity_rejected": 4707,
+   "eager": 48268,
+   "cache_hits": 21400
+  }
+ },
+ {
+  "scenario": "transfers",
+  "mutation": "naive_saga",
+  "seeds": 300,
+  "failing": 7,
+  "seconds": 2.7,
+  "first_failure": {
+   "seed": 28,
+   "problem": "balances differ from what the results imply (expected, actual): {'acct2': (56, 50)}"
+  },
+  "stats": {
+   "workflow_tasks": 9313,
+   "conflicts": 0,
+   "lost": 483,
+   "task_failures": 0,
+   "activities": 7175,
+   "activity_rejected": 960,
+   "eager": 9055,
+   "cache_hits": 3142
+  }
+ },
+ {
+  "scenario": "transfers",
+  "mutation": "no_idempotency",
+  "seeds": 300,
+  "failing": 221,
+  "seconds": 3.1,
+  "first_failure": {
+   "seed": 1,
+   "problem": "balances differ from what the results imply (expected, actual): {'acct2': (112, 110)}"
+  },
+  "stats": {
+   "workflow_tasks": 11638,
+   "conflicts": 0,
+   "lost": 732,
+   "task_failures": 0,
+   "activities": 10202,
+   "activity_rejected": 1389,
+   "eager": 13645,
+   "cache_hits": 4629
+  }
+ },
+ {
+  "scenario": "transfers",
+  "mutation": "skip_event_check",
+  "seeds": 300,
+  "failing": 0,
+  "seconds": 2.9,
+  "first_failure": null,
+  "stats": {
+   "workflow_tasks": 11668,
+   "conflicts": 0,
+   "lost": 791,
+   "task_failures": 0,
+   "activities": 10227,
+   "activity_rejected": 1393,
+   "eager": 13758,
+   "cache_hits": 4619
+  }
+ },
+ {
+  "scenario": "approvals",
+  "mutation": "skip_event_check",
+  "seeds": 300,
+  "failing": 74,
+  "seconds": 35.0,
+  "first_failure": {
+   "seed": 3,
+   "problem": "o3: never finished (task error: None)"
+  },
+  "stats": {
+   "workflow_tasks": 8844,
+   "conflicts": 0,
+   "lost": 372,
+   "task_failures": 439077,
+   "activities": 3737,
+   "activity_rejected": 463,
+   "eager": 5868,
+   "cache_hits": 2633
+  }
+ },
+ {
+  "scenario": "counters",
+  "mutation": "skip_event_check",
+  "seeds": 300,
+  "failing": 268,
+  "seconds": 153.1,
+  "first_failure": {
+   "seed": 0,
+   "problem": "c1: never finished (task error: NonDeterminism: the workflow code produced continued where the history has none)"
+  },
+  "stats": {
+   "workflow_tasks": 5025,
+   "conflicts": 0,
+   "lost": 155,
+   "task_failures": 1729399,
+   "activities": 0,
+   "activity_rejected": 0,
+   "eager": 0,
+   "cache_hits": 773
+  }
+ },
+ {
+  "scenario": "fanout",
+  "mutation": "skip_event_check",
+  "seeds": 300,
+  "failing": 92,
+  "seconds": 3.1,
+  "first_failure": {
+   "seed": 1,
+   "problem": "f1: never finished (task error: None)"
+  },
+  "stats": {
+   "workflow_tasks": 10735,
+   "conflicts": 0,
+   "lost": 407,
+   "task_failures": 0,
+   "activities": 4536,
+   "activity_rejected": 731,
+   "eager": 7248,
+   "cache_hits": 3097
+  }
+ },
+ {
+  "scenario": "transfers",
+  "mutation": "split_commit",
+  "seeds": 300,
+  "failing": 87,
+  "seconds": 4.4,
+  "first_failure": {
+   "seed": 0,
+   "problem": "t7: never finished (task error: None)"
+  },
+  "stats": {
+   "workflow_tasks": 11466,
+   "conflicts": 0,
+   "lost": 778,
+   "task_failures": 0,
+   "activities": 9018,
+   "activity_rejected": 329,
+   "eager": 5624,
+   "cache_hits": 2857
+  }
+ },
+ {
+  "scenario": "approvals",
+  "mutation": "split_commit",
+  "seeds": 300,
+  "failing": 63,
+  "seconds": 3.9,
+  "first_failure": {
+   "seed": 2,
+   "problem": "o4: never finished (task error: None)"
+  },
+  "stats": {
+   "workflow_tasks": 8702,
+   "conflicts": 348,
+   "lost": 368,
+   "task_failures": 0,
+   "activities": 3393,
+   "activity_rejected": 148,
+   "eager": 2931,
+   "cache_hits": 1766
+  }
+ },
+ {
+  "scenario": "counters",
+  "mutation": "split_commit",
+  "seeds": 300,
+  "failing": 17,
+  "seconds": 3.1,
+  "first_failure": {
+   "seed": 12,
+   "problem": "c1: never finished (task error: None)"
+  },
+  "stats": {
+   "workflow_tasks": 5364,
+   "conflicts": 1029,
+   "lost": 177,
+   "task_failures": 0,
+   "activities": 0,
+   "activity_rejected": 0,
+   "eager": 0,
+   "cache_hits": 1045
+  }
+ },
+ {
+  "scenario": "fanout",
+  "mutation": "split_commit",
+  "seeds": 300,
+  "failing": 56,
+  "seconds": 3.6,
+  "first_failure": {
+   "seed": 0,
+   "problem": "f1: never finished (task error: None)"
+  },
+  "stats": {
+   "workflow_tasks": 10392,
+   "conflicts": 381,
+   "lost": 388,
+   "task_failures": 0,
+   "activities": 3889,
+   "activity_rejected": 140,
+   "eager": 3568,
+   "cache_hits": 2091
+  }
+ }
+]

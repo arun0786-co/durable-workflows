@@ -76,7 +76,7 @@ Work is handed out by lease: a worker takes a workflow task or an activity for N
 - **Workflow task.** It commits only if no event was appended since the worker read the history (`last_event` unchanged). Otherwise the code has not seen everything that the new `task_done` would claim it saw. The commit returns `conflict` and the task runs again.
 - **Activity result.** It is accepted only with the current lease token. A result from an attempt that timed out and was retried is refused.
 
-Without the first check, a signal that arrives while a workflow task runs gets filed into a batch the code never saw. Replay then diverges (section 7).
+Without the first check, an event that arrives while a workflow task runs is filed into a batch the code never saw, and the commit clears the run's needs-task flag. Usually nothing wakes the workflow again: it waits forever for a result that is already in its history. Otherwise a later replay applies the event earlier than the first run did, and diverges (section 7).
 
 The workflow task's commands are carried out in the same transaction: activity rows inserted, timers inserted, children started, the run closed and the parent notified. If they were split from the history append, a crash between the two would leave a history saying "activity scheduled" with no activity row, and the run would wait forever (also caught, section 7).
 
@@ -88,7 +88,7 @@ Retries: a failed attempt is rescheduled with exponential backoff, unless the er
 - **Activities run at least once.** A worker can die after the side effect and before reporting, and the activity then runs again. No engine can avoid this without the outside system's help.
 - **Effects happen exactly once only if the outside system deduplicates.** Each activity gets `activity_context().idempotency_key`: the same for every attempt of that activity, different for everything else.
 
-The simulator found a subtler problem one level up, in my first saga. A transfer withdrew from one account and deposited into another. If the deposit ran out of retries, it refunded the withdrawal. But "ran out of retries" does not mean "did not happen". The last attempt can apply the deposit and then lose the reply. In 6 of 1,000 seeds that version created money: the deposit went through *and* the source was refunded.
+The simulator found a subtler problem one level up, in my first saga. A transfer withdrew from one account and deposited into another. If the deposit ran out of retries, it refunded the withdrawal. But "ran out of retries" does not mean "did not happen". The last attempt can apply the deposit and then lose the reply. In 7 of 300 seeds that version created money: the deposit went through *and* the source was refunded.
 
 The fix is the try/cancel pattern. Every operation carries a business key, and compensation is `void(key)`. The bank reverses the operation if it was applied, and refuses it if it arrives later, from an attempt still in flight. After the change, 0 of 2,000 seeds fail.
 
