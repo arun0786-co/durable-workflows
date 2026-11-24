@@ -206,6 +206,13 @@ class Replayer:
         self._batch(inputs, now, None)
         return self.new
 
+    def advance(self, inputs, now):
+        """For a replayer kept in memory after its commands were committed:
+        processes only the inputs that arrived since, as a new batch."""
+        self.new = []
+        self._batch(inputs, now, None)
+        return self.new
+
     def _batch(self, inputs, now, expected):
         self.now, self.expected = now, expected
         for ev in inputs:

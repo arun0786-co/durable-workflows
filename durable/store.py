@@ -91,7 +91,8 @@ class WorkflowTask:
     owner: str
     token: int
     last_event: int
-    history: list
+    history: list  # events first..last_event
+    first: int = 1  # > 1 when the worker said it already holds the earlier events
 
 
 @dataclass
@@ -248,32 +249,40 @@ class Store:
 
     # ---- workflow tasks
 
-    def acquire_workflow_task(self, owner, now, lease=30.0):
+    def acquire_workflow_task(self, owner, now, lease=30.0, known=None):
+        """known: {run_id: last event id the caller holds in memory}; only
+        later events are read for those runs."""
         with self.tx() as db:
             row = db.execute(
                 "SELECT run_id, workflow_id, workflow FROM runs WHERE needs_task = 1 AND task_after <= ?"
                 " AND (lease_until IS NULL OR lease_until <= ?) ORDER BY task_after LIMIT 1", (now, now)).fetchone()
             if row is None:
                 return None
-            return self._lease_workflow_task(db, row, owner, now, lease)
+            return self._lease_workflow_task(db, row, owner, now, lease, known)
 
-    def _lease_workflow_task(self, db, row, owner, now, lease):
+    def _lease_workflow_task(self, db, row, owner, now, lease, known=None):
         db.execute("UPDATE runs SET lease_owner = ?, lease_until = ?, lease_token = lease_token + 1 WHERE run_id = ?",
                    (owner, now + lease, row["run_id"]))
         r = db.execute("SELECT lease_token, last_event FROM runs WHERE run_id = ?", (row["run_id"],)).fetchone()
+        after = (known or {}).get(row["run_id"], 0)
+        if after > r["last_event"]:
+            after = 0
         hist = [{"id": h["id"], **json.loads(h["data"])} for h in
-                db.execute("SELECT id, data FROM history WHERE run_id = ? ORDER BY id", (row["run_id"],))]
+                db.execute("SELECT id, data FROM history WHERE run_id = ? AND id > ? ORDER BY id", (row["run_id"], after))]
         return WorkflowTask(row["run_id"], row["workflow_id"], row["workflow"], owner, r["lease_token"],
-                            r["last_event"], hist)
+                            r["last_event"], hist, after + 1)
 
-    def complete_workflow_task(self, task, commands, now, eager=0, queues=("default",)):
+    def complete_workflow_task(self, task, commands, now, eager=0, queues=("default",), task_time=None):
         """Appends task_done + the commands and carries them out. Returns
         (status, activities): status is "ok", "conflict" (events arrived
         meanwhile: run the task again) or "lost" (another worker owns the
         task now). With eager > 0, up to that many of the activities just
-        scheduled are leased to the same worker in the same transaction."""
+        scheduled are leased to the same worker in the same transaction.
+        task_time: the time the workflow code ran with (ctx.now()), recorded
+        in task_done so that replays see the same time."""
+        task_time = now if task_time is None else task_time
         if "split_commit" in self.unsafe:
-            return self._complete_split(task, commands, now), []
+            return self._complete_split(task, commands, now, task_time), []
         with self.tx() as db:
             r = db.execute("SELECT lease_token, last_event, status FROM runs WHERE run_id = ?", (task.run_id,)).fetchone()
             if r["lease_token"] != task.token or r["status"] != "running":
@@ -281,7 +290,7 @@ class Store:
             if r["last_event"] != task.last_event and "skip_event_check" not in self.unsafe:
                 db.execute("UPDATE runs SET lease_owner = NULL, lease_until = NULL WHERE run_id = ?", (task.run_id,))
                 return "conflict", []
-            self._append(db, task.run_id, [{"type": "task_done", "time": now}] + commands)
+            self._append(db, task.run_id, [{"type": "task_done", "time": task_time}] + commands)
             self._point("workflow_commit")
             db.execute("UPDATE runs SET needs_task = 0, lease_owner = NULL, lease_until = NULL, task_error = NULL"
                        " WHERE run_id = ?", (task.run_id,))
@@ -298,7 +307,7 @@ class Store:
                         taken.append(self._lease_activity(db, row, row["attempt"], task.owner, now))
         return "ok", taken
 
-    def _complete_split(self, task, commands, now):
+    def _complete_split(self, task, commands, now, task_time):
         # the broken variant: history and side tables in separate transactions
         with self.tx() as db:
             r = db.execute("SELECT lease_token, last_event FROM runs WHERE run_id = ?", (task.run_id,)).fetchone()
@@ -307,7 +316,7 @@ class Store:
             if r["last_event"] != task.last_event:
                 db.execute("UPDATE runs SET lease_owner = NULL, lease_until = NULL WHERE run_id = ?", (task.run_id,))
                 return "conflict"
-            self._append(db, task.run_id, [{"type": "task_done", "time": now}] + commands)
+            self._append(db, task.run_id, [{"type": "task_done", "time": task_time}] + commands)
             db.execute("UPDATE runs SET needs_task = 0, lease_owner = NULL, lease_until = NULL WHERE run_id = ?",
                        (task.run_id,))
         self._point("between_commits")
@@ -404,7 +413,7 @@ class Store:
             return None
         return row
 
-    def complete_activity(self, task, result, now, sticky=False, lease=30.0):
+    def complete_activity(self, task, result, now, sticky=False, lease=30.0, known=None):
         """Returns (accepted, workflow_task). accepted is False if this
         attempt no longer counts (it timed out and was retried, or the run
         closed). With sticky, the workflow task this result makes due is
@@ -421,7 +430,7 @@ class Store:
                                  " AND task_after <= ? AND (lease_until IS NULL OR lease_until <= ?)",
                                  (task.run_id, now, now)).fetchone()
                 if row is not None:
-                    wt = self._lease_workflow_task(db, row, task.owner, now, lease)
+                    wt = self._lease_workflow_task(db, row, task.owner, now, lease, known)
             return True, wt
 
     def fail_activity(self, task, error, now):
