@@ -280,3 +280,14 @@ def test_side_effect_runs_once(env_factory):
     wid = env.client.start(wf)
     env.run()
     assert env.client.result(wid) == 1 and len(seen) == 1
+
+
+def test_cached_and_replayed_runs_write_the_same_history(env_factory):
+    hists = []
+    for sticky in (True, False):
+        env = env_factory([sleeper, adds, fan_out], [add])
+        env.worker.sticky = sticky
+        ids = [env.client.start(adds, 6), env.client.start(fan_out, 3), env.client.start(sleeper, 50)]
+        env.run()
+        hists.append([[{k: v for k, v in e.items()} for e in env.client.history(w)] for w in ids])
+    assert hists[0] == hists[1]

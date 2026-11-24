@@ -91,6 +91,9 @@ async def reads_global_state(ctx):
 
 def test_nondeterministic_code_is_caught(env_factory):
     env = env_factory([reads_global_state], [a, b, c])
+    # with the sticky cache the code would not be re-run on this worker; a
+    # replay happens on another worker or after eviction, so force one
+    env.worker.sticky = False
     wid = env.client.start(reads_global_state)
     env.drain()
     assert "NonDeterminism" in env.client.describe(wid)["task_error"]
