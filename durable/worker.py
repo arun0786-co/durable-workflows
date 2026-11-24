@@ -9,6 +9,7 @@ import os
 import threading
 import time
 import uuid
+from collections import deque
 
 from .errors import error_info
 from .runtime import Replayer, norm
@@ -58,7 +59,7 @@ def activity_context():
 
 class Worker:
     def __init__(self, store, workflows=(), activities=(), clock=time.time, owner=None, queues=("default",),
-                 lease=30.0, task_retry=5.0):
+                 lease=30.0, task_retry=5.0, eager=True):
         self.store = store
         self.workflows = {name_of(f): f for f in workflows}
         self.activities = {name_of(f): f for f in activities}
@@ -67,12 +68,21 @@ class Worker:
         self.queues = tuple(queues)
         self.lease = lease
         self.task_retry = task_retry
+        # eager dispatch: work this worker leased for itself while reporting
+        # other work, in the same transaction (saves a take per step)
+        self.eager = eager
+        self.local_wf, self.local_act = deque(), deque()
         self.stats = {"workflow_tasks": 0, "conflicts": 0, "lost": 0, "task_failures": 0, "activities": 0,
-                      "activity_rejected": 0}
+                      "activity_rejected": 0, "eager": 0}
 
     # ---- workflow tasks
 
     def take_workflow_task(self):
+        if self.local_wf:
+            try:
+                return self.local_wf.popleft()
+            except IndexError:  # another thread got it first
+                pass
         return self.store.acquire_workflow_task(self.owner, self.clock(), self.lease)
 
     def run_workflow_task(self, task):
@@ -92,7 +102,10 @@ class Worker:
             self.stats["task_failures"] += 1
             self.store.fail_workflow_task(task, val, now, self.task_retry)
             return "failed"
-        res = self.store.complete_workflow_task(task, val, now)
+        res, acts = self.store.complete_workflow_task(task, val, now, eager=4 if self.eager else 0,
+                                                      queues=self.queues)
+        self.local_act.extend(acts)
+        self.stats["eager"] += len(acts)
         self.stats["workflow_tasks"] += res == "ok"
         self.stats["conflicts"] += res == "conflict"
         self.stats["lost"] += res == "lost"
@@ -108,6 +121,11 @@ class Worker:
     # ---- activities
 
     def take_activity(self):
+        if self.local_act:
+            try:
+                return self.local_act.popleft()
+            except IndexError:
+                pass
         return self.store.acquire_activity(self.owner, self.clock(), self.queues)
 
     def run_activity(self, task):
@@ -129,7 +147,13 @@ class Worker:
     def report_activity(self, task, outcome):
         kind, val = outcome
         now = self.clock()
-        ok = (self.store.complete_activity(task, val, now) if kind == "ok" else self.store.fail_activity(task, val, now))
+        if kind == "ok":
+            ok, wt = self.store.complete_activity(task, val, now, sticky=self.eager, lease=self.lease)
+            if wt is not None:
+                self.local_wf.append(wt)
+                self.stats["eager"] += 1
+        else:
+            ok = self.store.fail_activity(task, val, now)
         self.stats["activities"] += 1
         self.stats["activity_rejected"] += not ok
         return ok
@@ -169,7 +193,19 @@ class Worker:
         return threads
 
     def _clone(self):
-        w = Worker(Store(self.store.path), clock=self.clock, owner=self.owner, queues=self.queues, lease=self.lease,
-                   task_retry=self.task_retry)
+        w = Worker(Store(self.store.path, self.store.synchronous), clock=self.clock, owner=self.owner,
+                   queues=self.queues, lease=self.lease, task_retry=self.task_retry, eager=self.eager)
         w.workflows, w.activities, w.stats = self.workflows, self.activities, self.stats
+        w.local_wf, w.local_act = self.local_wf, self.local_act
         return w
+
+    def shutdown(self):
+        """Hands back eagerly leased work that has not started."""
+        for q in (self.local_wf, self.local_act):
+            while q:
+                self.store.release(q.popleft())
+
+    def drop_local(self):
+        """Forgets eagerly leased work (what a crash does)."""
+        self.local_wf.clear()
+        self.local_act.clear()
