@@ -133,6 +133,7 @@ class Store:
         self.lock = threading.Lock()  # one transaction at a time per connection
         self.unsafe = set()  # deliberately broken behaviour, for testing the tests
         self.crash_hook = None  # called with a point name; may raise Crash
+        self.new_id = lambda: uuid.uuid4().hex  # the simulator makes these deterministic
 
     def _point(self, name):
         if self.crash_hook:
@@ -180,7 +181,7 @@ class Store:
     # ---- runs
 
     def _new_run(self, db, workflow, workflow_id, args, now, parent=None):
-        run_id = uuid.uuid4().hex
+        run_id = self.new_id()
         db.execute(
             "INSERT INTO runs (run_id, workflow_id, workflow, status, parent, last_event, needs_task, task_after, created)"
             " VALUES (?, ?, ?, 'running', ?, 0, 1, ?, ?)",
