@@ -150,7 +150,9 @@ def simulate(seed, scenario="transfers", workers=3, fault_steps=1500, faults=Non
         if r < faults.jump:
             clock.t += rng.choice([rng.uniform(0, 3), rng.uniform(5, 30)])
         elif r < faults.jump + faults.crash and actors:
-            rng.choice(actors).job = None  # dies, whatever it held stays leased until the lease runs out
+            a = rng.choice(actors)  # dies: whatever it held stays leased until the lease runs out
+            a.job = None
+            a.w.drop_local()
         elif r < faults.jump + faults.crash + faults.pause and actors:
             a = rng.choice(actors)  # stalls (a long GC pause) and comes back later with a stale lease
             if a in actors and a.job:
@@ -164,6 +166,7 @@ def simulate(seed, scenario="transfers", workers=3, fault_steps=1500, faults=Non
                 a.step(rng)
             except Crash:
                 a.job = None
+                a.w.drop_local()
             clock.t += rng.uniform(0, 0.2)
 
     in_faults[0] = False
