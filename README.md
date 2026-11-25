@@ -18,6 +18,10 @@ async def order(ctx, order_id, items, cents):
     return "shipped"
 ```
 
+Running `examples/orders.py` and then printing the history of the order that was never shipped. Every step the code took is an event; replaying these 18 events rebuilds the workflow's state.
+
+![orders history](docs/images/orders_history.png)
+
 What it has:
 - **Activities** with retries, exponential backoff, per-attempt timeouts, heartbeats, and an idempotency key per activity.
 - **Durable timers and signals**, with `first` and `gather` over them.
@@ -51,6 +55,14 @@ After the faults stop, every workflow must finish. Then the checks run:
 
 Failing seeds out of seeds run. Transfers never receive an event during a workflow task, so the third variant cannot show there. One simulated run takes about 10 ms.
 
+![simulator matrix](docs/images/sim_matrix.png)
+
+*The table above as a grid, drawn from `results/sim.json`.*
+
+A short run of the simulator, first as written and then with the split-commit bug. The broken engine leaves workflows that never finish:
+
+![simulator run](docs/images/sim_run.png)
+
 **Two real bugs the simulator found:**
 - **My first transfer saga.** It refunded the source when a deposit ran out of retries. But the last attempt can apply the deposit and then lose the reply, so that version created money. Compensation now voids each step by its business key: the bank reverses the step if it was applied, and refuses it if it arrives later.
 - **Recorded time.** The engine recorded the time a workflow task *reported* instead of the time its code *ran*. A replay then saw a different `ctx.now()`. It went unnoticed until a deadline computed from `ctx.now()` went into an activity argument; then all 200 approval seeds stopped with a non-determinism error.
@@ -74,6 +86,10 @@ Apple M4 Pro, Python 3.12, SQLite 3.50. Other jobs kept the machine busy (load a
 
 **Throughput**, 2,000 such workflows queued at once: 310 to 710 workflows/s across configurations and runs. More worker processes never helped. All writes go through SQLite's single write lock, so they wait for each other.
 
+![throughput and latency](docs/images/throughput.png)
+
+*Throughput and latency from `results/throughput.json`. The star is the one run with `synchronous=NORMAL` instead of `FULL`.*
+
 **Replay** (`bench/replay.py`, `results/replay.json`), a workflow of n sequential activities, one worker, in-memory database:
 
 | activities | history events | one full replay | whole run, no cache | no cache, continue-as-new every 100 | sticky cache |
@@ -83,6 +99,12 @@ Apple M4 Pro, Python 3.12, SQLite 3.50. Other jobs kept the machine busy (load a
 | 3,000 | 9,003 | 13.9 ms | 54.5 s | 2.15 s | 0.25 s |
 
 Replay costs about 1.5 µs per event. Without the cache every workflow task replays everything, so the total grows with the square of the length.
+
+![replay cost](docs/images/replay.png)
+
+*Whole-run engine time from `results/replay.json`, log-log. Without the cache the slope is 2.*
+
+The figures are drawn from the files in `results/` by `scripts/make_figures.py`. The two terminal images are real output captured by `scripts/capture_terminal.py`.
 
 ## Run it
 
@@ -121,6 +143,7 @@ durable/
   chaos.py      the kill -9 run with real processes
 examples/orders.py
 bench/          sim, replay and throughput benchmarks
+scripts/        README figures and terminal captures
 docs/how-it-works.md
 ```
 
